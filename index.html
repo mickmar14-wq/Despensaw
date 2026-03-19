@@ -3,114 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventario Cloud ☁️</title>
+    <title>Inventario Realtime 📦</title>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
     <style>
-        :root { --primary: #2ecc71; --dark: #34495e; --bg: #f5f6fa; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 15px; }
+        :root { --primary: #27ae60; --dark: #2c3e50; }
+        body { font-family: sans-serif; background: #f4f7f6; margin: 0; padding: 15px; }
         .card { background: white; max-width: 500px; margin: auto; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 20px; }
         .btn { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; margin-bottom: 10px; font-size: 16px; }
         .btn-scan { background: var(--primary); color: white; }
         .btn-save { background: var(--dark); color: white; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-        #status { text-align: center; color: #7f8c8d; font-size: 14px; margin: 10px 0; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        #status { text-align: center; color: #7f8c8d; font-size: 13px; margin: 10px 0; font-weight: bold; }
         .item { background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .delete-btn { color: #e74c3c; font-weight: bold; background: none; border: none; padding: 10px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2 style="text-align:center; margin-top:0;">📦 Mi Despensa Cloud</h2>
+    <h2 style="text-align:center; margin-top:0;">☁️ Mi Despensa Cloud</h2>
     
     <input type="file" id="cam" accept="image/*" capture="environment" style="display:none">
-    <button class="btn btn-scan" onclick="document.getElementById('cam').click()">📸 ESCANEAR PRODUCTO</button>
+    <button class="btn btn-scan" onclick="document.getElementById('cam').click()">📸 ESCANEAR CÓDIGO</button>
     
-    <div id="status">Conectado a la nube</div>
+    <div id="status">Iniciando...</div>
 
-    <div id="form" style="display:none; background:#f9f9f9; padding:15px; border-radius:15px; margin-bottom:20px;">
-        <input type="text" id="pNombre" placeholder="Número del código">
+    <div id="form" style="display:none; background:#f9f9f9; padding:15px; border-radius:15px; margin-bottom:20px; border: 1px solid #ccc;">
+        <label>Número/Nombre:</label>
+        <input type="text" id="pNombre">
+        <label>Vencimiento:</label>
         <input type="date" id="pFecha">
-        <button class="btn btn-save" onclick="enviar()">💾 GUARDAR</button>
+        <button class="btn btn-save" onclick="enviar()">💾 GUARDAR EN GOOGLE</button>
     </div>
 
     <div id="lista"></div>
 </div>
 
 <script>
-    // ⚠️ REEMPLAZA ESTA URL CON LA TUYA (LA QUE TERMINA EN /exec)
+    // ⚠️ ASEGÚRATE QUE ESTA URL SEA LA QUE TERMINA EN /exec
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyZcLC6l-0Js9s_dqF7GYIKKcTMAXkhv3FEiJh2ppgo6WpjmGvPCH5MDKBDp3m9Rcok/exec";
 
-    window.onload = cargar;
+    window.onload = () => {
+        if(WEB_APP_URL === "https://script.google.com/macros/s/AKfycbyZcLC6l-0Js9s_dqF7GYIKKcTMAXkhv3FEiJh2ppgo6WpjmGvPCH5MDKBDp3m9Rcok/exec") {
+            document.getElementById('status').innerText = "❌ ERROR: Falta pegar la URL del script";
+        } else {
+            cargar();
+        }
+    };
 
+    // Función para CARGAR datos (GET)
     async function cargar() {
-        document.getElementById('status').innerText = "🔄 Sincronizando...";
+        const statusDiv = document.getElementById('status');
+        statusDiv.innerText = "🔄 Sincronizando con Google...";
+        statusDiv.style.color = "blue";
+
         try {
-            const res = await fetch(WEB_APP_URL);
-            const datos = await res.json();
+            // Añadimos un timestamp para evitar que el navegador use datos viejos (cache)
+            const response = await fetch(WEB_APP_URL + "?t=" + Date.now());
+            const datos = await response.json();
+            
             dibujar(datos);
-            document.getElementById('status').innerText = "✅ Datos actualizados";
+            statusDiv.innerText = "✅ Actualizado correctamente";
+            statusDiv.style.color = "green";
         } catch(e) {
-            document.getElementById('status').innerText = "❌ Error al cargar";
+            console.error(e);
+            statusDiv.innerText = "❌ Error de conexión. Revisa los permisos de Google.";
+            statusDiv.style.color = "red";
         }
     }
 
+    // Función para ENVIAR datos (POST)
     function enviar() {
         const nombre = document.getElementById('pNombre').value;
         const fecha = document.getElementById('pFecha').value;
-        if(!nombre || !fecha) return alert("Faltan datos");
+        
+        if(!nombre || !fecha) return alert("Por favor completa los dos campos");
 
-        document.getElementById('status').innerText = "⏳ Enviando...";
+        document.getElementById('status').innerText = "⏳ Enviando datos...";
 
         fetch(WEB_APP_URL, {
             method: "POST",
-            mode: "no-cors",
+            mode: "no-cors", // Crucial para evitar errores de seguridad en móviles
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "add", id: Date.now(), nombre, fecha })
         }).then(() => {
             document.getElementById('form').style.display = "none";
-            document.getElementById('status').innerText = "💾 ¡Listo! Recarga en 2 seg...";
-            setTimeout(cargar, 2000);
+            document.getElementById('status').innerText = "💾 ¡Guardado! Actualizando lista...";
+            // Esperamos 2.5 segundos para que Google Sheets procese el cambio
+            setTimeout(cargar, 2500);
+        }).catch(err => {
+            alert("Error al guardar: " + err);
         });
     }
 
+    // Función para BORRAR datos
     async function borrar(id) {
-        if(!confirm("¿Borrar?")) return;
-        document.getElementById('status').innerText = "🗑️ Borrando...";
+        if(!confirm("¿Deseas eliminar este producto?")) return;
+        document.getElementById('status').innerText = "🗑️ Eliminando...";
+        
         await fetch(WEB_APP_URL, {
             method: "POST",
             mode: "no-cors",
             body: JSON.stringify({ action: "delete", id: id })
         });
+        
         setTimeout(cargar, 1500);
     }
 
     function dibujar(productos) {
         const div = document.getElementById('lista');
         div.innerHTML = "";
+        
+        if(productos.length === 0) {
+            div.innerHTML = "<p style='text-align:center; color:grey;'>No hay productos en la lista.</p>";
+            return;
+        }
+
         productos.forEach(p => {
             div.innerHTML += `
                 <div class="item">
-                    <div><b>${p.nombre}</b><br><small>Vence: ${p.fecha}</small></div>
-                    <button onclick="borrar(${p.id})" style="background:none; border:none; color:red; font-size:20px;">🗑️</button>
+                    <div>
+                        <b style="font-size:16px;">${p.nombre}</b><br>
+                        <small style="color:#666;">Vence: ${p.fecha}</small>
+                    </div>
+                    <button class="delete-btn" onclick="borrar(${p.id})">BORRAR</button>
                 </div>`;
         });
     }
 
-    // Escáner Quagga para fotos
+    // Lector de cámara (Igual que antes)
     document.getElementById('cam').onchange = (e) => {
         const file = e.target.files[0];
         if(!file) return;
         document.getElementById('form').style.display = "block";
-        document.getElementById('status').innerText = "🔍 Analizando...";
+        document.getElementById('status').innerText = "🔍 Analizando imagen...";
         
         Quagga.decodeSingle({
             src: URL.createObjectURL(file),
-            decoder: { readers: ["ean_reader", "code_128_reader"] }
+            decoder: { readers: ["ean_reader", "code_128_reader", "code_39_reader"] }
         }, (res) => {
             if(res) {
                 document.getElementById('pNombre').value = res.codeResult.code;
                 document.getElementById('status').innerText = "✅ Código detectado";
             } else {
-                document.getElementById('status').innerText = "⚠️ No se leyó el código";
+                document.getElementById('status').innerText = "⚠️ No se detectó código, escribe el nombre.";
             }
         });
     };
