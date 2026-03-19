@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario Cloud ☁️</title>
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
+    <style>
+        :root { --primary: #2ecc71; --dark: #34495e; --bg: #f5f6fa; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 15px; }
+        .card { background: white; max-width: 500px; margin: auto; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 20px; }
+        .btn { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; margin-bottom: 10px; font-size: 16px; }
+        .btn-scan { background: var(--primary); color: white; }
+        .btn-save { background: var(--dark); color: white; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        #status { text-align: center; color: #7f8c8d; font-size: 14px; margin: 10px 0; }
+        .item { background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2 style="text-align:center; margin-top:0;">📦 Mi Despensa Cloud</h2>
+    
+    <input type="file" id="cam" accept="image/*" capture="environment" style="display:none">
+    <button class="btn btn-scan" onclick="document.getElementById('cam').click()">📸 ESCANEAR PRODUCTO</button>
+    
+    <div id="status">Conectado a la nube</div>
+
+    <div id="form" style="display:none; background:#f9f9f9; padding:15px; border-radius:15px; margin-bottom:20px;">
+        <input type="text" id="pNombre" placeholder="Número del código">
+        <input type="date" id="pFecha">
+        <button class="btn btn-save" onclick="enviar()">💾 GUARDAR</button>
+    </div>
+
+    <div id="lista"></div>
+</div>
+
+<script>
+    // ⚠️ REEMPLAZA ESTA URL CON LA TUYA (LA QUE TERMINA EN /exec)
+    const WEB_APP_URL = "TU_URL_AQUÍ";
+
+    window.onload = cargar;
+
+    async function cargar() {
+        document.getElementById('status').innerText = "🔄 Sincronizando...";
+        try {
+            const res = await fetch(WEB_APP_URL);
+            const datos = await res.json();
+            dibujar(datos);
+            document.getElementById('status').innerText = "✅ Datos actualizados";
+        } catch(e) {
+            document.getElementById('status').innerText = "❌ Error al cargar";
+        }
+    }
+
+    function enviar() {
+        const nombre = document.getElementById('pNombre').value;
+        const fecha = document.getElementById('pFecha').value;
+        if(!nombre || !fecha) return alert("Faltan datos");
+
+        document.getElementById('status').innerText = "⏳ Enviando...";
+
+        fetch(WEB_APP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            body: JSON.stringify({ action: "add", id: Date.now(), nombre, fecha })
+        }).then(() => {
+            document.getElementById('form').style.display = "none";
+            document.getElementById('status').innerText = "💾 ¡Listo! Recarga en 2 seg...";
+            setTimeout(cargar, 2000);
+        });
+    }
+
+    async function borrar(id) {
+        if(!confirm("¿Borrar?")) return;
+        document.getElementById('status').innerText = "🗑️ Borrando...";
+        await fetch(WEB_APP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            body: JSON.stringify({ action: "delete", id: id })
+        });
+        setTimeout(cargar, 1500);
+    }
+
+    function dibujar(productos) {
+        const div = document.getElementById('lista');
+        div.innerHTML = "";
+        productos.forEach(p => {
+            div.innerHTML += `
+                <div class="item">
+                    <div><b>${p.nombre}</b><br><small>Vence: ${p.fecha}</small></div>
+                    <button onclick="borrar(${p.id})" style="background:none; border:none; color:red; font-size:20px;">🗑️</button>
+                </div>`;
+        });
+    }
+
+    // Escáner Quagga para fotos
+    document.getElementById('cam').onchange = (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        document.getElementById('form').style.display = "block";
+        document.getElementById('status').innerText = "🔍 Analizando...";
+        
+        Quagga.decodeSingle({
+            src: URL.createObjectURL(file),
+            decoder: { readers: ["ean_reader", "code_128_reader"] }
+        }, (res) => {
+            if(res) {
+                document.getElementById('pNombre').value = res.codeResult.code;
+                document.getElementById('status').innerText = "✅ Código detectado";
+            } else {
+                document.getElementById('status').innerText = "⚠️ No se leyó el código";
+            }
+        });
+    };
+</script>
+</body>
+</html>
