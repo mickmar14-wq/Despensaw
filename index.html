@@ -3,140 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventario Realtime 📦</title>
+    <title>Inventario Despensa 📦</title>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
     <style>
-        :root { --primary: #27ae60; --dark: #2c3e50; }
-        body { font-family: sans-serif; background: #f4f7f6; margin: 0; padding: 15px; }
-        .card { background: white; max-width: 500px; margin: auto; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 20px; }
-        .btn { width: 100%; border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; margin-bottom: 10px; font-size: 16px; }
+        :root { --primary: #27ae60; --dark: #2c3e50; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 15px; }
+        .card { background: white; max-width: 500px; margin: auto; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 20px; border: 1px solid #eee; }
+        .btn { width: 100%; border: none; padding: 16px; border-radius: 12px; font-weight: bold; cursor: pointer; margin-bottom: 10px; font-size: 16px; transition: 0.3s; }
         .btn-scan { background: var(--primary); color: white; }
         .btn-save { background: var(--dark); color: white; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        #status { text-align: center; color: #7f8c8d; font-size: 13px; margin: 10px 0; font-weight: bold; }
-        .item { background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .delete-btn { color: #e74c3c; font-weight: bold; background: none; border: none; padding: 10px; }
+        input { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
+        #status { text-align: center; color: #7f8c8d; font-size: 14px; margin: 10px 0; font-weight: bold; min-height: 20px; }
+        .item { background: #fff; padding: 15px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .delete-btn { color: #e74c3c; font-weight: bold; background: none; border: none; padding: 10px; cursor: pointer; }
+        label { font-weight: bold; color: var(--dark); font-size: 14px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2 style="text-align:center; margin-top:0;">☁️ Mi Despensa Cloud</h2>
+    <h2 style="text-align:center; margin-top:0; color: var(--dark);">☁️ Inventario Cloud</h2>
     
     <input type="file" id="cam" accept="image/*" capture="environment" style="display:none">
-    <button class="btn btn-scan" onclick="document.getElementById('cam').click()">📸 ESCANEAR CÓDIGO</button>
+    <button class="btn btn-scan" onclick="document.getElementById('cam').click()">📸 TOMAR FOTO AL CÓDIGO</button>
     
-    <div id="status">Iniciando...</div>
+    <div id="status">Iniciando conexión...</div>
 
-    <div id="form" style="display:none; background:#f9f9f9; padding:15px; border-radius:15px; margin-bottom:20px; border: 1px solid #ccc;">
-        <label>Número/Nombre:</label>
-        <input type="text" id="pNombre">
-        <label>Vencimiento:</label>
+    <div id="form" style="display:none; background:#f9f9f9; padding:15px; border-radius:15px; margin-bottom:20px; border: 1px solid #ddd;">
+        <label>Nombre o Código:</label>
+        <input type="text" id="pNombre" placeholder="Ej: Leche o 770...">
+        <label>Fecha de Vencimiento:</label>
         <input type="date" id="pFecha">
-        <button class="btn btn-save" onclick="enviar()">💾 GUARDAR EN GOOGLE</button>
+        <button class="btn btn-save" onclick="enviar()">💾 GUARDAR EN LA NUBE</button>
     </div>
 
     <div id="lista"></div>
 </div>
 
 <script>
-    // ⚠️ ASEGÚRATE QUE ESTA URL SEA LA QUE TERMINA EN /exec
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyZcLC6l-0Js9s_dqF7GYIKKcTMAXkhv3FEiJh2ppgo6WpjmGvPCH5MDKBDp3m9Rcok/exec";
+    // URL DE TU GOOGLE SCRIPT (YA ACTUALIZADA)
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzbMNzNNKGpqvljaSuxrlsUDsmX1ZjbKDZVTTzFm6909NJ-8BHGcE_0m5W8wmc9PHJ0/exec";
 
-    window.onload = () => {
-        if(WEB_APP_URL === "https://script.google.com/macros/s/AKfycbyZcLC6l-0Js9s_dqF7GYIKKcTMAXkhv3FEiJh2ppgo6WpjmGvPCH5MDKBDp3m9Rcok/exec") {
-            document.getElementById('status').innerText = "❌ ERROR: Falta pegar la URL del script";
-        } else {
-            cargar();
-        }
-    };
+    window.onload = cargar;
 
-    // Función para CARGAR datos (GET)
+    // 1. CARGAR PRODUCTOS (GET)
     async function cargar() {
         const statusDiv = document.getElementById('status');
-        statusDiv.innerText = "🔄 Sincronizando con Google...";
-        statusDiv.style.color = "blue";
+        statusDiv.innerText = "🔄 Sincronizando...";
+        statusDiv.style.color = "#3498db";
 
         try {
-            // Añadimos un timestamp para evitar que el navegador use datos viejos (cache)
+            // Agregamos timestamp para evitar caché
             const response = await fetch(WEB_APP_URL + "?t=" + Date.now());
             const datos = await response.json();
             
             dibujar(datos);
-            statusDiv.innerText = "✅ Actualizado correctamente";
+            statusDiv.innerText = "✅ Sincronizado con Google Sheets";
             statusDiv.style.color = "green";
         } catch(e) {
-            console.error(e);
-            statusDiv.innerText = "❌ Error de conexión. Revisa los permisos de Google.";
+            statusDiv.innerText = "❌ Error al cargar datos";
             statusDiv.style.color = "red";
         }
     }
 
-    // Función para ENVIAR datos (POST)
-    function enviar() {
+    // 2. ENVIAR PRODUCTO (POST)
+    async function enviar() {
         const nombre = document.getElementById('pNombre').value;
         const fecha = document.getElementById('pFecha').value;
         
-        if(!nombre || !fecha) return alert("Por favor completa los dos campos");
+        if(!nombre || !fecha) return alert("Completa el nombre y la fecha");
 
-        document.getElementById('status').innerText = "⏳ Enviando datos...";
+        document.getElementById('status').innerText = "⏳ Enviando a la nube...";
 
-        fetch(WEB_APP_URL, {
-            method: "POST",
-            mode: "no-cors", // Crucial para evitar errores de seguridad en móviles
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "add", id: Date.now(), nombre, fecha })
-        }).then(() => {
+        // Usamos parámetros en la URL para máxima compatibilidad con móviles
+        const params = "?action=add&id=" + Date.now() + 
+                       "&nombre=" + encodeURIComponent(nombre) + 
+                       "&fecha=" + encodeURIComponent(fecha);
+
+        try {
+            await fetch(WEB_APP_URL + params, { method: "POST", mode: "no-cors" });
+            
             document.getElementById('form').style.display = "none";
+            document.getElementById('pNombre').value = "";
             document.getElementById('status').innerText = "💾 ¡Guardado! Actualizando lista...";
-            // Esperamos 2.5 segundos para que Google Sheets procese el cambio
-            setTimeout(cargar, 2500);
-        }).catch(err => {
+            
+            // Esperamos 3 segundos para que Google escriba la fila
+            setTimeout(cargar, 3000);
+        } catch(err) {
             alert("Error al guardar: " + err);
-        });
+        }
     }
 
-    // Función para BORRAR datos
+    // 3. BORRAR PRODUCTO
     async function borrar(id) {
-        if(!confirm("¿Deseas eliminar este producto?")) return;
+        if(!confirm("¿Eliminar este producto?")) return;
         document.getElementById('status').innerText = "🗑️ Eliminando...";
         
-        await fetch(WEB_APP_URL, {
-            method: "POST",
-            mode: "no-cors",
-            body: JSON.stringify({ action: "delete", id: id })
-        });
+        await fetch(WEB_APP_URL + "?action=delete&id=" + id, { method: "POST", mode: "no-cors" });
         
-        setTimeout(cargar, 1500);
+        setTimeout(cargar, 2000);
     }
 
+    // 4. MOSTRAR EN PANTALLA
     function dibujar(productos) {
         const div = document.getElementById('lista');
         div.innerHTML = "";
         
         if(productos.length === 0) {
-            div.innerHTML = "<p style='text-align:center; color:grey;'>No hay productos en la lista.</p>";
+            div.innerHTML = "<p style='text-align:center; color:grey; font-style:italic;'>No hay productos guardados.</p>";
             return;
         }
 
-        productos.forEach(p => {
+        // Ordenar por fecha (los más cercanos a vencer primero)
+        productos.sort((a,b) => new Date(a.fecha) - new Date(b.fecha)).forEach(p => {
             div.innerHTML += `
                 <div class="item">
                     <div>
-                        <b style="font-size:16px;">${p.nombre}</b><br>
-                        <small style="color:#666;">Vence: ${p.fecha}</small>
+                        <b style="font-size:16px; color:#2c3e50;">${p.nombre}</b><br>
+                        <small style="color:#e67e22; font-weight:bold;">Vence: ${p.fecha}</small>
                     </div>
-                    <button class="delete-btn" onclick="borrar(${p.id})">BORRAR</button>
+                    <button class="delete-btn" onclick="borrar(${p.id})">🗑️</button>
                 </div>`;
         });
     }
 
-    // Lector de cámara (Igual que antes)
+    // 5. LECTOR DE CÓDIGO POR FOTO
     document.getElementById('cam').onchange = (e) => {
         const file = e.target.files[0];
         if(!file) return;
         document.getElementById('form').style.display = "block";
-        document.getElementById('status').innerText = "🔍 Analizando imagen...";
+        document.getElementById('status').innerText = "🔍 Analizando código...";
         
         Quagga.decodeSingle({
             src: URL.createObjectURL(file),
@@ -146,7 +142,7 @@
                 document.getElementById('pNombre').value = res.codeResult.code;
                 document.getElementById('status').innerText = "✅ Código detectado";
             } else {
-                document.getElementById('status').innerText = "⚠️ No se detectó código, escribe el nombre.";
+                document.getElementById('status').innerText = "⚠️ No se leyó bien, escribe el nombre.";
             }
         });
     };
