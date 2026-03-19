@@ -3,42 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventario Inteligente 🍎</title>
+    <title>Inventario Preciso 🍏</title>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
     <style>
-        :root { --primary: #27ae60; --dark: #2c3e50; --danger: #e74c3c; --warning: #f39c12; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 15px; }
-        .card { background: white; max-width: 500px; margin: auto; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 20px; }
+        :root { --primary: #27ae60; --dark: #2c3e50; --danger: #e74c3c; --offline: #9b59b6; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+        .card { background: white; max-width: 500px; margin: auto; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 15px; }
+        #interactive { width: 100%; height: 250px; border-radius: 15px; overflow: hidden; display: none; margin-bottom: 10px; border: 3px solid var(--primary); position: relative; }
+        #interactive video { width: 100%; height: 100%; object-fit: cover; }
         .btn { width: 100%; border: none; padding: 16px; border-radius: 12px; font-weight: bold; cursor: pointer; margin-bottom: 10px; font-size: 16px; }
         .btn-scan { background: var(--primary); color: white; }
+        .btn-stop { background: var(--danger); color: white; display: none; }
         .btn-save { background: var(--dark); color: white; }
+        .btn-sync { background: var(--offline); color: white; display: none; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% {opacity: 1;} 50% {opacity: 0.7;} 100% {opacity: 1;} }
         input { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
         #status { text-align: center; color: #7f8c8d; font-size: 14px; margin: 10px 0; font-weight: bold; }
-        
-        /* Estilos de los productos */
-        .item { background: #fff; padding: 15px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; transition: 0.3s; }
-        .alerta-roja { background: #fff5f5 !important; border-left: 6px solid var(--danger) !important; }
-        .alerta-naranja { background: #fff9f0 !important; border-left: 6px solid var(--warning) !important; }
-        
-        .delete-btn { color: #95a5a6; font-weight: bold; background: none; border: none; padding: 10px; cursor: pointer; font-size: 20px; }
-        .delete-btn:hover { color: var(--danger); }
+        .item { background: #fff; padding: 15px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .alerta-roja { border-left: 6px solid var(--danger); background: #fff5f5; }
+        .delete-btn { color: #95a5a6; font-weight: bold; background: none; border: none; font-size: 20px; cursor: pointer; }
         .dias-badge { font-size: 11px; padding: 3px 8px; border-radius: 20px; color: white; margin-top: 5px; display: inline-block; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2 style="text-align:center; margin-top:0;">🍏 Mi Despensa Cloud</h2>
+    <h2 style="text-align:center; margin-top:0;">🍏 Mi Inventario</h2>
     
-    <input type="file" id="cam" accept="image/*" capture="environment" style="display:none">
-    <button class="btn btn-scan" onclick="document.getElementById('cam').click()">📸 ESCANEAR / TOMAR FOTO</button>
+    <div id="interactive"></div>
     
-    <div id="status">Conectando...</div>
+    <button id="btnStart" class="btn btn-scan" onclick="startScanner()">📸 ESCANEAR CÓDIGO</button>
+    <button id="btnStop" class="btn btn-stop" onclick="stopScanner()">🛑 DETENER CÁMARA</button>
+    <button id="btnSync" class="btn btn-sync" onclick="sincronizarPendientes()">📡 SUBIR PENDIENTES</button>
+    
+    <div id="status">Conectado</div>
 
-    <div id="form" style="display:none; background:#f9f9f9; padding:15px; border-radius:15px; margin-bottom:20px; border: 1px solid #ddd;">
-        <input type="text" id="pNombre" placeholder="Nombre o Código">
+    <div id="form" style="background:#f9f9f9; padding:15px; border-radius:15px; margin-bottom:20px; border: 1px solid #ddd;">
+        <label>Producto / Código:</label>
+        <input type="text" id="pNombre" placeholder="Escribe o escanea...">
+        <label>Fecha de vencimiento:</label>
         <input type="date" id="pFecha">
-        <button class="btn btn-save" onclick="enviar()">💾 GUARDAR EN LA NUBE</button>
+        <button class="btn btn-save" onclick="intentarGuardar()">💾 GUARDAR PRODUCTO</button>
     </div>
 
     <div id="lista"></div>
@@ -46,111 +51,127 @@
 
 <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxs-lPd2b4STyC9tPWT83QtEon4nHiyZ-nrolPP3pDoYkh2j8PSrh-_irONvfPpON8N/exec";
+    let _scannerRunning = false;
 
-    window.onload = cargar;
+    window.onload = () => { verificarPendientes(); cargar(); };
 
+    // --- ESCÁNER ---
+    function startScanner() {
+        _scannerRunning = true;
+        document.getElementById('interactive').style.display = "block";
+        document.getElementById('btnStart').style.display = "none";
+        document.getElementById('btnStop').style.display = "block";
+        
+        Quagga.init({
+            inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive'), constraints: { facingMode: "environment" } },
+            decoder: { readers: ["ean_reader", "code_128_reader", "code_39_reader"] }
+        }, (err) => {
+            if (err) { alert("Cámara no disponible"); return stopScanner(); }
+            Quagga.start();
+        });
+
+        Quagga.onDetected((res) => {
+            if (_scannerRunning) {
+                document.getElementById('pNombre').value = res.codeResult.code;
+                document.getElementById('status').innerText = "✅ Código capturado. Pon la fecha.";
+                stopScanner();
+            }
+        });
+    }
+
+    function stopScanner() {
+        _scannerRunning = false;
+        Quagga.stop();
+        document.getElementById('interactive').style.display = "none";
+        document.getElementById('btnStart').style.display = "block";
+        document.getElementById('btnStop').style.display = "none";
+    }
+
+    // --- LÓGICA DE GUARDADO ---
+    async function intentarGuardar() {
+        const nombre = document.getElementById('pNombre').value;
+        const fecha = document.getElementById('pFecha').value;
+        
+        if(!nombre || !fecha) return alert("Por favor, pon el nombre y la fecha real.");
+
+        const nuevo = { action: "add", id: Date.now(), nombre, fecha };
+
+        if (!navigator.onLine) { guardarEnLocal(nuevo); return; }
+
+        document.getElementById('status').innerText = "⏳ Guardando...";
+        try {
+            const params = `?action=add&id=${nuevo.id}&nombre=${encodeURIComponent(nombre)}&fecha=${encodeURIComponent(fecha)}`;
+            await fetch(WEB_APP_URL + params, { method: "POST", mode: "no-cors" });
+            limpiarFormulario();
+            setTimeout(cargar, 3000);
+        } catch (e) { guardarEnLocal(nuevo); }
+    }
+
+    function guardarEnLocal(producto) {
+        let pendientes = JSON.parse(localStorage.getItem("pendientes") || "[]");
+        pendientes.push(producto);
+        localStorage.setItem("pendientes", JSON.stringify(pendientes));
+        alert("💾 Sin internet. Se guardó en el teléfono.");
+        limpiarFormulario();
+        verificarPendientes();
+    }
+
+    function verificarPendientes() {
+        let pendientes = JSON.parse(localStorage.getItem("pendientes") || "[]");
+        document.getElementById('btnSync').style.display = pendientes.length > 0 ? "block" : "none";
+        if(pendientes.length > 0) document.getElementById('btnSync').innerText = `📡 SUBIR ${pendientes.length} PENDIENTES`;
+    }
+
+    async function sincronizarPendientes() {
+        if (!navigator.onLine) return alert("Aún sin internet.");
+        let pendientes = JSON.parse(localStorage.getItem("pendientes") || "[]");
+        for (let p of pendientes) {
+            const params = `?action=add&id=${p.id}&nombre=${encodeURIComponent(p.nombre)}&fecha=${encodeURIComponent(p.fecha)}`;
+            await fetch(WEB_APP_URL + params, { method: "POST", mode: "no-cors" });
+        }
+        localStorage.removeItem("pendientes");
+        verificarPendientes();
+        cargar();
+    }
+
+    // --- INTERFAZ ---
     async function cargar() {
-        const statusDiv = document.getElementById('status');
-        statusDiv.innerText = "🔄 Sincronizando...";
+        if (!navigator.onLine) return;
         try {
             const response = await fetch(WEB_APP_URL + "?t=" + Date.now());
             const datos = await response.json();
             dibujar(datos);
-            statusDiv.innerText = "✅ Inventario al día";
-            statusDiv.style.color = "green";
-        } catch(e) {
-            statusDiv.innerText = "❌ Error de conexión";
-            statusDiv.style.color = "red";
-        }
+        } catch(e) {}
     }
 
-    async function enviar() {
-        const nombre = document.getElementById('pNombre').value;
-        const fecha = document.getElementById('pFecha').value;
-        if(!nombre || !fecha) return alert("Completa los datos");
-
-        document.getElementById('status').innerText = "⏳ Guardando...";
-        const params = "?action=add&id=" + Date.now() + "&nombre=" + encodeURIComponent(nombre) + "&fecha=" + encodeURIComponent(fecha);
-
-        try {
-            await fetch(WEB_APP_URL + params, { method: "POST", mode: "no-cors" });
-            document.getElementById('form').style.display = "none";
-            document.getElementById('pNombre').value = "";
-            document.getElementById('status').innerText = "💾 ¡Listo! Actualizando...";
-            setTimeout(cargar, 3000);
-        } catch(err) { alert("Error: " + err); }
-    }
-
-    async function borrar(id) {
-        if(!confirm("¿Eliminar este producto?")) return;
-        document.getElementById('status').innerText = "🗑️ Borrando...";
-        await fetch(WEB_APP_URL + "?action=delete&id=" + id, { method: "POST", mode: "no-cors" });
+    function borrar(id) {
+        if(!confirm("¿Borrar?")) return;
+        fetch(WEB_APP_URL + "?action=delete&id=" + id, { method: "POST", mode: "no-cors" });
         setTimeout(cargar, 2000);
     }
 
     function dibujar(productos) {
-        const div = document.getElementById('lista');
-        div.innerHTML = "";
-        
-        if(productos.length === 0) {
-            div.innerHTML = "<p style='text-align:center; color:grey;'>Despensa vacía.</p>";
-            return;
-        }
-
-        const hoy = new Date();
-        hoy.setHours(0,0,0,0);
-
-        // Ordenar: Los que vencen antes van primero
+        const div = document.getElementById('lista'); div.innerHTML = "";
+        const hoy = new Date(); hoy.setHours(0,0,0,0);
         productos.sort((a,b) => new Date(a.fecha) - new Date(b.fecha)).forEach(p => {
-            const fechaCorta = p.fecha.toString().split('T')[0];
-            const fechaVence = new Date(fechaCorta + "T00:00:00");
-            const diffDias = Math.ceil((fechaVence - hoy) / (1000 * 60 * 60 * 24));
-
-            let claseAlerta = "";
-            let colorBadge = "#2ecc71"; // Verde por defecto
-            let mensajeDias = `Faltan ${diffDias} días`;
-
-            if (diffDias <= 0) {
-                claseAlerta = "alerta-roja";
-                colorBadge = "#e74c3c";
-                mensajeDias = "¡VENCIDO!";
-            } else if (diffDias <= 3) {
-                claseAlerta = "alerta-roja";
-                colorBadge = "#e74c3c";
-            } else if (diffDias <= 7) {
-                claseAlerta = "alerta-naranja";
-                colorBadge = "#f39c12";
-            }
-
-            div.innerHTML += `
-                <div class="item ${claseAlerta}">
-                    <div>
-                        <b style="font-size:16px; color:#2c3e50;">${p.nombre}</b><br>
-                        <span class="dias-badge" style="background:${colorBadge}">${mensajeDias}</span><br>
-                        <small style="color:#7f8c8d;">Fecha: ${fechaCorta}</small>
-                    </div>
-                    <button class="delete-btn" onclick="borrar(${p.id})">🗑️</button>
-                </div>`;
+            const fCorta = p.fecha.toString().split('T')[0];
+            const fVence = new Date(fCorta + "T00:00:00");
+            const diff = Math.ceil((fVence - hoy) / (1000 * 60 * 60 * 24));
+            let color = "#2ecc71"; let alerta = "";
+            if(diff <= 3) { color="#e74c3c"; alerta="alerta-roja"; }
+            else if(diff <= 7) { color="#f39c12"; }
+            div.innerHTML += `<div class="item ${alerta}">
+                <div><b>${p.nombre}</b><br><span class="dias-badge" style="background:${color}">${diff <= 0 ? 'VENCIDO' : 'Faltan '+diff+' días'}</span></div>
+                <button class="delete-btn" onclick="borrar(${p.id})">🗑️</button>
+            </div>`;
         });
     }
 
-    document.getElementById('cam').onchange = (e) => {
-        const file = e.target.files[0];
-        if(!file) return;
-        document.getElementById('form').style.display = "block";
-        document.getElementById('status').innerText = "🔍 Analizando...";
-        Quagga.decodeSingle({
-            src: URL.createObjectURL(file),
-            decoder: { readers: ["ean_reader", "code_128_reader", "code_39_reader"] }
-        }, (res) => {
-            if(res) {
-                document.getElementById('pNombre').value = res.codeResult.code;
-                document.getElementById('status').innerText = "✅ Código detectado";
-            } else {
-                document.getElementById('status').innerText = "⚠️ Escribe el nombre manualmente";
-            }
-        });
-    };
+    function limpiarFormulario() {
+        document.getElementById('pNombre').value = "";
+        document.getElementById('pFecha').value = "";
+        document.getElementById('status').innerText = "✅ Guardado correctamente";
+    }
 </script>
 </body>
 </html>
